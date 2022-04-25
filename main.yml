@@ -1,0 +1,112 @@
+---
+- name: "Install and configuring Mariadb-Server"
+  become: true
+  hosts: amazon
+  vars_files:
+    - vars/variables.yml
+  
+  tasks:
+
+    - name: "Install Apache"
+      yum:
+        name:
+         - httpd
+    
+    - name: "Install PHP"
+      shell: amazon-linux-extras install php7.4 -y
+
+    - name: "Create document root"
+      file:
+        path: "/var/www/{{ http_host }}"
+        state: directory
+        owner: "apache"
+        group: "apache"
+        mode: '0755'
+
+    - name: "Set up Apache VirtualHost"
+      template:
+        src: "virtualhost.conf.tmpl"
+        dest: "/etc/httpd/conf.d/{{http_conf}}"
+
+    - name: "Restart/Enable httpd service"
+      service:
+        name: httpd
+        state: restarted
+        enabled: true
+              
+    - name: "Install Mariadb-Server"
+      yum:
+        name: 
+          - mariadb-server
+          - MySQL-python
+        state: present
+            
+    - name: "Restart/Enable mariadb service"
+      service:
+        name: mariadb
+        state: restarted
+        enabled: true
+            
+    - name: "Set root password for mariadb"
+      ignore_errors: true
+      mysql_user:
+        login_user: "{{ mysql_user }}"
+        login_password: ""
+        user: "{{ mysql_user }}"
+        password: "{{ mysql_root_password }}"
+        host_all: true
+
+    - name: "Remove Anonymous users"
+      mysql_user:
+        login_user: "{{ mysql_user }}"
+        login_password: "{{ mysql_root_password }}"
+        user: ""
+        host_all: true 
+        state: absent
+
+    - name: Remove the MySQL test database
+      mysql_db:
+        name: test
+        state: absent
+        login_user: "{{ mysql_user }}"
+        login_password: "{{ mysql_root_password }}"
+
+    - name: "Creating database for WordPress"
+      mysql_db:
+        login_user: "{{ mysql_user }}"
+        login_password: "{{ mysql_root_password }}"
+        name: "{{ mysql_db }}"
+        state: present
+
+    - name: "Creating user for WordPress database"
+      mysql_user:
+        login_user: "{{ mysql_user }}"
+        login_password: "{{ mysql_root_password }}"
+        user: "{{ wp_user }}"
+        password: "{{ wp_password }}"
+        priv: "{{ mysql_db }}.*:ALL"
+
+    - name: "Download and unpack latest WordPress"
+      unarchive:
+        src: https://wordpress.org/latest.tar.gz
+        dest: "/var/www/{{ http_host }}"
+        remote_src: yes
+        creates: "/var/www/{{ http_host }}/wordpress"
+
+    - name: "Set up wp-config"
+      template:
+        src: wp-config.php.tmpl
+        dest: /var/www/{{ http_host }}/wordpress/wp-config.php
+
+    - name: "Set ownership"
+      file:
+        path: "/var/www/{{ http_host }}"
+        state: directory
+        recurse: yes
+        owner: apache
+        group: apache
+
+    - name: "Restarting httpd service"
+      service:
+        name: httpd
+        state: restarted
