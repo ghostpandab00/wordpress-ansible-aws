@@ -1,5 +1,5 @@
 ---
-- name: "Install and configuring Mariadb-Server"
+- name: "Install WordPress and configuring it"
   become: true
   hosts: amazon
   vars_files:
